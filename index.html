@@ -81,7 +81,6 @@ button,input{
     align-items:center;
     justify-content:center;
     font-size:1rem;
-    cursor:pointer;
 }
 
 .hero{
@@ -169,6 +168,7 @@ button,input{
     width:100%;
     height:42vh;
     z-index:1;
+    touch-action:auto !important;
 }
 
 .panel{
@@ -241,6 +241,7 @@ button,input{
     border:1px solid #edf2f7;
     padding:16px;
     box-shadow:0 8px 18px rgba(0,0,0,0.04);
+    transition:0.25s;
 }
 
 .driver-card.active{
@@ -434,8 +435,45 @@ button,input{
     display:none;
 }
 
+.empty-box{
+    text-align:center;
+    padding:35px 20px;
+    background:white;
+    border-radius:24px;
+    border:1px dashed #cbd5e1;
+}
+
+.empty-box h3{
+    margin-bottom:10px;
+}
+
 .leaflet-routing-container{
     display:none !important;
+}
+
+.leaflet-control-container .leaflet-top{
+    top:10px;
+}
+
+@media(max-width:480px){
+
+    .hero h1{
+        font-size:1.75rem;
+    }
+
+    .trip-price{
+        font-size:1.7rem;
+    }
+
+    .driver-price{
+        font-size:0.78rem;
+    }
+
+    .btn{
+        font-size:0.76rem;
+        padding:13px 6px;
+    }
+
 }
 
 </style>
@@ -462,7 +500,7 @@ button,input{
     <h3>Bike, Auto, or Cab—Anywhere, Anytime.</h3>
 
     <p>
-        Need an emergency taxi or planning a long trip?
+        Need an emergency taxi or planning a long trip? Get matched with top-rated local drivers instantly.
     </p>
 
     <div class="search-box">
@@ -556,18 +594,23 @@ button,input{
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 
 <script>
 
 let map;
 let routingControl = null;
+
 let userCoords = [23.7248,91.3302];
+
 let userMarker = null;
 let destinationMarker = null;
 let destinationCoords = null;
+
 let pickMode = false;
+
 let driverMarkers = [];
-let realTripDistance = 0;
 
 const MAX_DRIVER_DISTANCE = 10;
 
@@ -596,7 +639,7 @@ const drivers = [
     type:"Bike",
     name:"Bikram Debbarma",
     phone:"9876543212",
-    area:"jAMPUIJALA BAZAR",
+    area:"Jampuijala Bazar",
     lat:23.7034082,
     lon:91.4560609,
     rating:4.8,
@@ -630,9 +673,9 @@ const drivers = [
 {
     emoji:"🛺",
     type:"Auto",
-    name:"Ranjit DEBBARMA",
+    name:"Ranjit Debbarma",
     phone:"9876543215",
-    area:"Don Bosco School, Nabasardar Para",
+    area:"Don Bosco School",
     lat:23.7113457,
     lon:91.4407506,
     rating:4.7,
@@ -642,9 +685,9 @@ const drivers = [
 {
     emoji:"🛺",
     type:"Auto",
-    name:"Dipankar jamatia",
+    name:"Dipankar Jamatia",
     phone:"9876543216",
-    area:"Jampuijala 7bn TSR",
+    area:"Jampuijala 7BN TSR",
     lat:23.7237375,
     lon:91.4542932,
     rating:4.6,
@@ -656,7 +699,7 @@ const drivers = [
     type:"Cab",
     name:"Sujit Debbarma",
     phone:"9876543217",
-    area:"Jampuijala rd block",
+    area:"Jampuijala RD Block",
     lat:23.7093866,
     lon:91.4563804,
     rating:4.9,
@@ -668,7 +711,7 @@ const drivers = [
     type:"Cab",
     name:"Rakesh Tripura",
     phone:"9876543218",
-    area:"jampuijala Bazar Area",
+    area:"Jampuijala Bazar Area",
     lat:23.7093865,
     lon:91.4529755,
     rating:4.8,
@@ -710,7 +753,6 @@ function initMap(){
     map.on('click',onMapClick);
 
     getLocation();
-
 }
 
 function getLocation(){
@@ -740,8 +782,20 @@ function getLocation(){
                 }).addTo(map);
 
                 map.setView(userCoords,14);
-
             }
+
+            try{
+
+                const res = await fetch(
+                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${userCoords[0]}&lon=${userCoords[1]}`
+                );
+
+                const data = await res.json();
+
+                document.getElementById('currentLocationText').value =
+                data.display_name || 'Current Location';
+
+            }catch(e){}
 
             renderDrivers();
 
@@ -762,7 +816,6 @@ function getLocation(){
         }
 
     );
-
 }
 
 function calcDistance(lat1,lon1,lat2,lon2){
@@ -780,7 +833,6 @@ function calcDistance(lat1,lon1,lat2,lon2){
     )/2;
 
     return 12742 * Math.asin(Math.sqrt(a));
-
 }
 
 function renderDrivers(){
@@ -797,7 +849,8 @@ function renderDrivers(){
 
     let nearbyDrivers = drivers.map(driver=>{
 
-        // STRAIGHT LINE DISTANCE FOR NEARBY DRIVERS
+        // Straight-line ONLY for nearby detection
+
         const distance = calcDistance(
             userCoords[0],
             userCoords[1],
@@ -808,7 +861,7 @@ function renderDrivers(){
         return {
             ...driver,
             distance,
-            eta:Math.max(2,Math.round(distance * 3))
+            eta:Math.max(2,Math.round(distance * 4))
         };
 
     })
@@ -819,6 +872,18 @@ function renderDrivers(){
 
     document.getElementById('count').innerHTML =
     `${nearbyDrivers.length} Drivers`;
+
+    if(nearbyDrivers.length === 0){
+
+        list.innerHTML = `
+        <div class="empty-box">
+            <h3>No Nearby Drivers</h3>
+            <p>No drivers available nearby.</p>
+        </div>
+        `;
+
+        return;
+    }
 
     nearbyDrivers.forEach((driver,index)=>{
 
@@ -849,15 +914,6 @@ function renderDrivers(){
 
         driverMarkers.push(marker);
 
-        let estimatedDriverPrice = "—";
-
-        // REAL ROAD DISTANCE FOR FARE
-        if(realTripDistance > 0){
-
-            estimatedDriverPrice =
-            `₹${Math.round(realTripDistance * PRICE_PER_KM[driver.type])}`;
-        }
-
         const card = document.createElement('div');
 
         card.className='driver-card';
@@ -887,10 +943,6 @@ function renderDrivers(){
                             ⭐ ${driver.rating} • ${driver.rides} rides
                         </div>
 
-                    </div>
-
-                    <div class="driver-price">
-                        ${estimatedDriverPrice}
                     </div>
 
                 </div>
@@ -938,31 +990,32 @@ function renderDrivers(){
         `;
 
         list.appendChild(card);
-
     });
-
 }
 
 function toggleCard(index,lat,lon){
 
     const card = document.getElementById(`card-${index}`);
 
-    const alreadyActive =
-    card.classList.contains('active');
+    // FIXED AUTO MINIMIZE ISSUE
 
-    document.querySelectorAll('.driver-card')
-    .forEach(c=>{
-        c.classList.remove('active');
-    });
+    if(card.classList.contains('active')){
 
-    if(!alreadyActive){
+        card.classList.remove('active');
+
+    }else{
+
+        document.querySelectorAll('.driver-card')
+        .forEach(c=>{
+            c.classList.remove('active');
+        });
+
         card.classList.add('active');
     }
 
     map.flyTo([lat,lon],16,{
         duration:1.2
     });
-
 }
 
 async function calculateTrip(destination){
@@ -992,9 +1045,7 @@ async function calculateTrip(destination){
     }catch(e){
 
         alert("Something went wrong");
-
     }
-
 }
 
 function setDestination(){
@@ -1002,7 +1053,6 @@ function setDestination(){
     if(destinationMarker){
 
         map.removeLayer(destinationMarker);
-
     }
 
     destinationMarker = L.marker(destinationCoords)
@@ -1013,7 +1063,6 @@ function setDestination(){
     if(routingControl){
 
         map.removeControl(routingControl);
-
     }
 
     routingControl = L.Routing.control({
@@ -1033,8 +1082,7 @@ function setDestination(){
             styles:[
                 {
                     color:'#10b981',
-                    weight:6,
-                    opacity:0.9
+                    weight:6
                 }
             ]
         },
@@ -1045,36 +1093,29 @@ function setDestination(){
 
     })
 
-    // REAL ROAD DISTANCE
     .on('routesfound',function(e){
+
+        // REAL ROAD DISTANCE
 
         const route = e.routes[0];
 
-        // REAL ROAD DISTANCE IN KM
-        realTripDistance =
+        const roadDistanceKM =
         route.summary.totalDistance / 1000;
 
-        // REAL TIME
-        const realTime =
-        Math.round(route.summary.totalTime / 60);
-
-        // REAL FARE
         const estimatedCabFare =
-        Math.round(realTripDistance * PRICE_PER_KM.Cab);
+        Math.round(roadDistanceKM * PRICE_PER_KM.Cab);
 
         document.getElementById('estimatedPrice').innerHTML =
         `₹${estimatedCabFare}`;
 
         document.getElementById('tripDistance').innerHTML =
-        `${realTripDistance.toFixed(1)} KM • ${realTime} mins route`;
-
-        // UPDATE DRIVER PRICES
-        renderDrivers();
+        `${roadDistanceKM.toFixed(1)} KM road distance`;
 
     })
 
     .addTo(map);
 
+    renderDrivers();
 }
 
 function onMapClick(e){
@@ -1092,7 +1133,6 @@ function onMapClick(e){
     .style.display='none';
 
     setDestination();
-
 }
 
 document.getElementById('findBtn')
@@ -1111,7 +1151,6 @@ document.getElementById('findBtn')
     }
 
     await calculateTrip(destination);
-
 });
 
 document.getElementById('pickBtn')
@@ -1121,7 +1160,6 @@ document.getElementById('pickBtn')
 
     document.getElementById('pickModeText')
     .style.display='block';
-
 });
 
 document.getElementById('recenterBtn')
@@ -1130,7 +1168,6 @@ document.getElementById('recenterBtn')
     map.flyTo(userCoords,14,{
         duration:1.2
     });
-
 });
 
 document.getElementById('liveBtn')
@@ -1139,7 +1176,6 @@ document.getElementById('liveBtn')
     map.flyTo(userCoords,14,{
         duration:1.2
     });
-
 });
 
 window.onload = initMap;
