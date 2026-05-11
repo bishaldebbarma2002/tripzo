@@ -81,6 +81,7 @@ button,input{
     align-items:center;
     justify-content:center;
     font-size:1rem;
+    cursor:pointer;
 }
 
 .hero{
@@ -168,7 +169,6 @@ button,input{
     width:100%;
     height:42vh;
     z-index:1;
-    touch-action:auto !important;
 }
 
 .panel{
@@ -241,7 +241,6 @@ button,input{
     border:1px solid #edf2f7;
     padding:16px;
     box-shadow:0 8px 18px rgba(0,0,0,0.04);
-    transition:0.25s;
 }
 
 .driver-card.active{
@@ -435,45 +434,8 @@ button,input{
     display:none;
 }
 
-.empty-box{
-    text-align:center;
-    padding:35px 20px;
-    background:white;
-    border-radius:24px;
-    border:1px dashed #cbd5e1;
-}
-
-.empty-box h3{
-    margin-bottom:10px;
-}
-
 .leaflet-routing-container{
     display:none !important;
-}
-
-.leaflet-control-container .leaflet-top{
-    top:10px;
-}
-
-@media(max-width:480px){
-
-    .hero h1{
-        font-size:1.75rem;
-    }
-
-    .trip-price{
-        font-size:1.7rem;
-    }
-
-    .driver-price{
-        font-size:0.78rem;
-    }
-
-    .btn{
-        font-size:0.76rem;
-        padding:13px 6px;
-    }
-
 }
 
 </style>
@@ -500,7 +462,7 @@ button,input{
     <h3>Bike, Auto, or Cab—Anywhere, Anytime.</h3>
 
     <p>
-        Need an emergency taxi or planning a long trip? Get matched with top-rated local drivers instantly.
+        Need an emergency taxi or planning a long trip?
     </p>
 
     <div class="search-box">
@@ -605,6 +567,7 @@ let destinationMarker = null;
 let destinationCoords = null;
 let pickMode = false;
 let driverMarkers = [];
+let realTripDistance = 0;
 
 const MAX_DRIVER_DISTANCE = 10;
 
@@ -780,19 +743,6 @@ function getLocation(){
 
             }
 
-            try{
-
-                const res = await fetch(
-                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${userCoords[0]}&lon=${userCoords[1]}`
-                );
-
-                const data = await res.json();
-
-                document.getElementById('currentLocationText').value =
-                data.display_name || 'Current Location';
-
-            }catch(e){}
-
             renderDrivers();
 
             document.getElementById('loader').style.display='none';
@@ -847,6 +797,7 @@ function renderDrivers(){
 
     let nearbyDrivers = drivers.map(driver=>{
 
+        // STRAIGHT LINE DISTANCE FOR NEARBY DRIVERS
         const distance = calcDistance(
             userCoords[0],
             userCoords[1],
@@ -868,18 +819,6 @@ function renderDrivers(){
 
     document.getElementById('count').innerHTML =
     `${nearbyDrivers.length} Drivers`;
-
-    if(nearbyDrivers.length === 0){
-
-        list.innerHTML = `
-        <div class="empty-box">
-            <h3>No Nearby Drivers</h3>
-            <p>Currently no drivers available within 5 KM range.</p>
-        </div>
-        `;
-
-        return;
-    }
 
     nearbyDrivers.forEach((driver,index)=>{
 
@@ -908,27 +847,15 @@ function renderDrivers(){
             {icon:markerIcon}
         ).addTo(map);
 
-        marker.bindPopup(`
-            <b>${driver.name}</b><br>
-            ${driver.type}<br>
-            ${driver.distance.toFixed(1)} KM Away
-        `);
-
         driverMarkers.push(marker);
 
         let estimatedDriverPrice = "—";
 
-        if(destinationCoords){
-
-            const tripDistance = calcDistance(
-                userCoords[0],
-                userCoords[1],
-                destinationCoords[0],
-                destinationCoords[1]
-            );
+        // REAL ROAD DISTANCE FOR FARE
+        if(realTripDistance > 0){
 
             estimatedDriverPrice =
-            `₹${Math.round(tripDistance * PRICE_PER_KM[driver.type])}`;
+            `₹${Math.round(realTripDistance * PRICE_PER_KM[driver.type])}`;
         }
 
         const card = document.createElement('div');
@@ -979,7 +906,7 @@ function renderDrivers(){
                     </div>
 
                     <div class="badge gray-badge">
-                        ${driver.distance.toFixed(1)} KM
+                        ${driver.distance.toFixed(1)} KM Away
                     </div>
 
                     <div class="badge gray-badge">
@@ -1083,22 +1010,6 @@ function setDestination(){
     .bindPopup('Destination')
     .openPopup();
 
-    const distance = calcDistance(
-        userCoords[0],
-        userCoords[1],
-        destinationCoords[0],
-        destinationCoords[1]
-    );
-
-    const estimatedCabFare =
-    Math.round(distance * PRICE_PER_KM.Cab);
-
-    document.getElementById('estimatedPrice').innerHTML =
-    `₹${estimatedCabFare}`;
-
-    document.getElementById('tripDistance').innerHTML =
-    `${distance.toFixed(1)} KM estimated route distance`;
-
     if(routingControl){
 
         map.removeControl(routingControl);
@@ -1122,7 +1033,8 @@ function setDestination(){
             styles:[
                 {
                     color:'#10b981',
-                    weight:6
+                    weight:6,
+                    opacity:0.9
                 }
             ]
         },
@@ -1131,9 +1043,37 @@ function setDestination(){
             return null;
         }
 
-    }).addTo(map);
+    })
 
-    renderDrivers();
+    // REAL ROAD DISTANCE
+    .on('routesfound',function(e){
+
+        const route = e.routes[0];
+
+        // REAL ROAD DISTANCE IN KM
+        realTripDistance =
+        route.summary.totalDistance / 1000;
+
+        // REAL TIME
+        const realTime =
+        Math.round(route.summary.totalTime / 60);
+
+        // REAL FARE
+        const estimatedCabFare =
+        Math.round(realTripDistance * PRICE_PER_KM.Cab);
+
+        document.getElementById('estimatedPrice').innerHTML =
+        `₹${estimatedCabFare}`;
+
+        document.getElementById('tripDistance').innerHTML =
+        `${realTripDistance.toFixed(1)} KM • ${realTime} mins route`;
+
+        // UPDATE DRIVER PRICES
+        renderDrivers();
+
+    })
+
+    .addTo(map);
 
 }
 
